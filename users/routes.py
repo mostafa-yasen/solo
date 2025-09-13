@@ -3,6 +3,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from extensions import db
 from users.models import User
 from sqlalchemy.exc import IntegrityError
+from flask_jwt_extended import create_access_token, get_jwt_identity, jwt_required
 
 users = Blueprint("users", __name__)
 
@@ -47,7 +48,11 @@ def login():
 
     user = User.query.filter_by(username=username).first()
     if user and check_password_hash(user.password_hash, password):
-        return jsonify({"message": "Login successful"}), 200
+        access_token = create_access_token(identity=str(user.id))
+        return (
+            jsonify({"message": "Login successful", "access_token": access_token}),
+            200,
+        )
 
     return jsonify({"error": "Invalid credentials"}), 401
 
@@ -55,3 +60,22 @@ def login():
 @users.route("/login", methods=["GET"])
 def login_page():
     return "User login page"
+
+
+@users.route("/mee", methods=["GET"])
+@jwt_required()
+def me():
+    current_user_id = get_jwt_identity()
+    user = User.query.get(current_user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    return (
+        jsonify(
+            {
+                "message": "User information",
+                "user": {"id": user.id, "username": user.username, "email": user.email},
+            }
+        ),
+        200,
+    )
