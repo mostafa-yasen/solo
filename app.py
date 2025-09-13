@@ -4,7 +4,7 @@ from flask import Flask
 from extensions import db, migrate, jwt, ma
 from users import users
 from projects import projects
-
+from projects.models import Project, ProjectMember
 
 basedir = os.path.abspath(os.path.dirname(__file__))
 
