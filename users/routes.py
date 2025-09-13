@@ -1,22 +1,26 @@
 from flask import Blueprint, jsonify, request
+from marshmallow import ValidationError
 from werkzeug.security import generate_password_hash, check_password_hash
 from extensions import db
 from users.models import User
 from sqlalchemy.exc import IntegrityError
 from flask_jwt_extended import create_access_token, get_jwt_identity, jwt_required
+from users.schemas import UserSchema, UserLoginSchema, UserLoginOutputSchema
+
 
 users = Blueprint("users", __name__)
 
 
 @users.route("/register", methods=["POST"])
 def register_user():
-    data = request.json
-    username = data.get("username")
-    email = data.get("email")
-    password = data.get("password")
+    try:
+        validated_data = UserSchema().load(request.json)
+    except ValidationError as err:
+        return jsonify({"error": err.messages}), 400
 
-    if not all([username, email, password]):
-        return jsonify({"error": "Missing required fields"}), 400
+    username = validated_data.get("username")
+    email = validated_data.get("email")
+    password = validated_data.get("password")
 
     hashed_password = generate_password_hash(password)
     new_user = User(
@@ -32,7 +36,10 @@ def register_user():
         db.session.rollback()
         return jsonify({"error": str(e)}), 409
 
-    return jsonify({"message": "User registered successfully", "data": data}), 201
+    return (
+        jsonify({"message": "User registered successfully", "data": validated_data}),
+        201,
+    )
 
 
 @users.route("/register", methods=["GET"])
@@ -42,15 +49,20 @@ def registration_page():
 
 @users.route("/login", methods=["POST"])
 def login():
-    data = request.json
-    username = data.get("username")
-    password = data.get("password")
+    try:
+        validated_data = UserLoginSchema().load(request.json)
+    except ValidationError as err:
+        return jsonify({"error": err.messages}), 400
+
+    username = validated_data.get("username")
+    password = validated_data.get("password")
 
     user = User.query.filter_by(username=username).first()
     if user and check_password_hash(user.password_hash, password):
         access_token = create_access_token(identity=str(user.id))
+        user_login_output = UserLoginOutputSchema().dump({"access_token": access_token})
         return (
-            jsonify({"message": "Login successful", "access_token": access_token}),
+            jsonify({"message": "Login successful", "data": user_login_output}),
             200,
         )
 
@@ -70,11 +82,13 @@ def me():
     if not user:
         return jsonify({"error": "User not found"}), 404
 
+    user_schema = UserSchema().dump(user)
+
     return (
         jsonify(
             {
                 "message": "User information",
-                "user": {"id": user.id, "username": user.username, "email": user.email},
+                "user": user_schema,
             }
         ),
         200,

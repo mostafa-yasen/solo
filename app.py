@@ -1,7 +1,7 @@
 import os
 
 from flask import Flask
-from extensions import db, migrate, jwt
+from extensions import db, migrate, jwt, ma
 from users import users
 from projects import projects
 
@@ -18,6 +18,7 @@ app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY", "DEFAULT_JWT_SECRET_K
 db.init_app(app)
 migrate.init_app(app, db)
 jwt.init_app(app)
+ma.init_app(app)
 
 app.register_blueprint(users)
 app.register_blueprint(projects)
