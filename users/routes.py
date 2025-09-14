@@ -1,3 +1,4 @@
+import logging
 from flask import Blueprint, jsonify, request
 from marshmallow import ValidationError
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -7,7 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from flask_jwt_extended import create_access_token, get_jwt_identity, jwt_required
 from users.schemas import UserSchema, UserLoginSchema, UserLoginOutputSchema
 
-
+_logger = logging.getLogger(__name__)
 users = Blueprint("users", __name__)
 
 
@@ -16,13 +17,10 @@ def register_user():
     try:
         validated_data = UserSchema().load(request.json)
     except ValidationError as err:
+        msg = f"[API] [Register] Validation error during registration: {err.messages}"
+        _logger.error(msg)
         return (
-            jsonify(
-                {
-                    "message": "Missing required fields",
-                    "error": err.messages,
-                }
-            ),
+            jsonify({"message": "Missing required fields", "error": err.messages}),
             400,
         )
 
@@ -40,8 +38,11 @@ def register_user():
     try:
         db.session.add(new_user)
         db.session.commit()
+        _logger.info(f"[API] [Register] New user registered: {username}")
     except IntegrityError as e:
         db.session.rollback()
+        msg = f"[API] [Register] Integrity error during registration for user {username}: {str(e)}"
+        _logger.error(msg)
         return jsonify({"message": "User already exists", "error": str(e)}), 409
 
     return (
@@ -60,6 +61,8 @@ def login():
     try:
         validated_data = UserLoginSchema().load(request.json)
     except ValidationError as err:
+        msg = f"[API] [Login] Validation error during login: {err.messages}"
+        _logger.error(msg)
         return jsonify({"error": err.messages}), 400
 
     username = validated_data.get("username")
@@ -69,11 +72,14 @@ def login():
     if user and check_password_hash(user.password_hash, password):
         access_token = create_access_token(identity=str(user.id))
         user_login_output = UserLoginOutputSchema().dump({"access_token": access_token})
+        _logger.info(f"[API] [Login] User logged in: {username}")
         return (
             jsonify({"message": "Login successful", "data": user_login_output}),
             200,
         )
 
+    msg = f"[API] [Login] Invalid credentials for user: {username}"
+    _logger.warning(msg)
     return (
         jsonify(
             {
@@ -96,10 +102,12 @@ def me():
     current_user_id = get_jwt_identity()
     user = db.session.get(User, current_user_id)
     if not user:
+        _logger.warning(f"[API] [Me] User not found: {current_user_id}")
         return jsonify({"error": "User not found"}), 404
 
     user_schema = UserSchema().dump(user)
 
+    _logger.info(f"[API] [Me] Retrieved user info for user: {user.username}")
     return (
         jsonify(
             {
