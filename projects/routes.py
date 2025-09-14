@@ -1,12 +1,14 @@
-from app import db
+import logging
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from marshmallow.exceptions import ValidationError
 from marshmallow import INCLUDE
+from extensions import db
 from projects.schemas import ProjectSchema
 from projects.models import Project
 from users.models import User
 
+_logger = logging.getLogger(__name__)
 projects = Blueprint("projects", __name__)
 project_schema = ProjectSchema()
 projects_schema = ProjectSchema(many=True)
@@ -19,6 +21,8 @@ def create_project():
     try:
         data = project_schema.load(request.json)
     except ValidationError as err:
+        msg = f"[API] [Create Project] Validation error during project creation: {err.messages}"
+        _logger.error(msg)
         return jsonify(err.messages), 400
 
     current_user_id = get_jwt_identity()
@@ -30,6 +34,9 @@ def create_project():
     db.session.add(project)
     db.session.commit()
 
+    _logger.info(
+        f"[API] [Create Project] New project created: {project.name} by user: {current_user_id}"
+    )
     return project_schema.jsonify(project), 201
 
 
@@ -40,6 +47,10 @@ def get_projects():
     current_user_id = get_jwt_identity()
     user = db.session.get(User, current_user_id)
 
+    if not user:
+        _logger.warning(f"[API] [Get Projects] User not found: {current_user_id}")
+        return jsonify({"error": "User not found"}), 404
+
     status_filter = request.args.get("status")
     query = user.created_projects
 
@@ -47,6 +58,9 @@ def get_projects():
         query = query.filter_by(status=status_filter)
 
     user_projects = query.all()
+    _logger.info(
+        f"[API] [Get Projects] Retrieved {len(user_projects)} projects for user: {current_user_id}"
+    )
     return jsonify(projects_schema.dump(user_projects)), 200
 
 
@@ -60,8 +74,14 @@ def get_project(project_id):
     ).first()
 
     if not project:
+        _logger.warning(
+            f"[API] [Get Project] Project not found: {project_id} for user: {current_user_id}"
+        )
         return jsonify({"msg": "Project not found"}), 404
 
+    _logger.info(
+        f"[API] [Get Project] Retrieved project: {project_id} for user: {current_user_id}"
+    )
     return project_schema.jsonify(project), 200
 
 
@@ -73,17 +93,25 @@ def update_project(project_id):
     project = Project.query.get_or_404(project_id)
 
     if project.creator_id != current_user_id:
+        _logger.warning(
+            f"[API] [Update Project] Unauthorized access attempt for project: {project_id} by user: {current_user_id}"
+        )
         return jsonify({"error": "You are not authorized to edit this project"}), 403
 
     try:
         data = project_schema.load(request.json, partial=True, unknown=INCLUDE)
     except ValidationError as err:
+        msg = f"[API] [Update Project] Validation error during project update: {err.messages}"
+        _logger.error(msg)
         return jsonify(err.messages), 400
 
     for key, value in data.items():
         setattr(project, key, value)
 
     db.session.commit()
+    _logger.info(
+        f"[API] [Update Project] Updated project: {project_id} by user: {current_user_id}"
+    )
     return project_schema.jsonify(project), 200
 
 
@@ -95,8 +123,14 @@ def delete_project(project_id):
     project = Project.query.get_or_404(project_id)
 
     if project.creator_id != current_user_id:
+        _logger.warning(
+            f"[API] [Delete Project] Unauthorized access attempt for project: {project_id} by user: {current_user_id}"
+        )
         return jsonify({"error": "You are not authorized to delete this project"}), 403
 
     db.session.delete(project)
     db.session.commit()
+    _logger.info(
+        f"[API] [Delete Project] Deleted project: {project_id} by user: {current_user_id}"
+    )
     return "", 204
