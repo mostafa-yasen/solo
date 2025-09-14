@@ -5,6 +5,9 @@ from extensions import db, migrate, jwt, ma
 from users import users
 from projects import projects
 from projects.models import Project, ProjectMember
+from dotenv import load_dotenv
+
+load_dotenv()
 
 basedir = os.path.abspath(os.path.dirname(__file__))
 

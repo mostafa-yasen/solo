@@ -16,7 +16,15 @@ def register_user():
     try:
         validated_data = UserSchema().load(request.json)
     except ValidationError as err:
-        return jsonify({"error": err.messages}), 400
+        return (
+            jsonify(
+                {
+                    "message": "Missing required fields",
+                    "error": err.messages,
+                }
+            ),
+            400,
+        )
 
     username = validated_data.get("username")
     email = validated_data.get("email")
@@ -34,7 +42,7 @@ def register_user():
         db.session.commit()
     except IntegrityError as e:
         db.session.rollback()
-        return jsonify({"error": str(e)}), 409
+        return jsonify({"message": "User already exists", "error": str(e)}), 409
 
     return (
         jsonify({"message": "User registered successfully", "data": validated_data}),
@@ -66,7 +74,15 @@ def login():
             200,
         )
 
-    return jsonify({"error": "Invalid credentials"}), 401
+    return (
+        jsonify(
+            {
+                "message": "Invalid credentials",
+                "error": "Invalid credentials",
+            }
+        ),
+        401,
+    )
 
 
 @users.route("/login", methods=["GET"])
@@ -74,7 +90,7 @@ def login_page():
     return "User login page"
 
 
-@users.route("/mee", methods=["GET"])
+@users.route("/me", methods=["GET"])
 @jwt_required()
 def me():
     current_user_id = get_jwt_identity()
