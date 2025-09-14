@@ -2,7 +2,7 @@ from app import db
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from marshmallow.exceptions import ValidationError
-
+from marshmallow import INCLUDE
 from projects.schemas import ProjectSchema
 from projects.models import Project
 from users.models import User
@@ -38,7 +38,7 @@ def create_project():
 def get_projects():
     """Get all projects for the current user"""
     current_user_id = get_jwt_identity()
-    user = User.query.get(current_user_id)
+    user = db.session.get(User, current_user_id)
 
     status_filter = request.args.get("status")
     query = user.created_projects
@@ -76,7 +76,7 @@ def update_project(project_id):
         return jsonify({"error": "You are not authorized to edit this project"}), 403
 
     try:
-        data = project_schema.load(request.json, partial=True)
+        data = project_schema.load(request.json, partial=True, unknown=INCLUDE)
     except ValidationError as err:
         return jsonify(err.messages), 400
 
